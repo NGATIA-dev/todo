@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced SMART Maslow Todo</title>
+
+<style>
+body { font-family: Arial; background:#f4f6f9; margin:0; padding:20px; }
+.container { max-width:1000px; margin:auto; }
+.card { background:white; padding:15px; margin-bottom:15px; border-radius:8px; box-shadow:0 3px 8px rgba(0,0,0,0.08); }
+input, textarea, select { width:100%; padding:8px; margin:5px 0 10px; }
+textarea { resize:vertical; }
+button { padding:8px 12px; border:none; border-radius:5px; cursor:pointer; margin:4px 4px 4px 0; }
+.primary { background:#4CAF50; color:white; }
+.secondary { background:#3498db; color:white; }
+.danger { background:#e74c3c; color:white; }
+.export { background:#6c5ce7; color:white; }
+.badge { padding:4px 8px; border-radius:4px; font-size:12px; background:#ddd; margin-right:5px; }
+.smartScore { font-weight:bold; margin-top:5px; }
+footer { text-align:center; margin-top:20px; font-size:12px; color:#666; }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>🧠 SMART + Maslow Task Planner</h1>
+
+<div class="card">
+<h3>Add Task</h3>
+
+<input type="text" id="title" placeholder="Task title">
+
+<select id="time">
+<option>Now</option>
+<option>Later</option>
+<option>Eventually</option>
+</select>
+
+<select id="maslow">
+<option>Physiological</option>
+<option>Safety</option>
+<option>Love/Belonging</option>
+<option>Esteem</option>
+<option>Self-Actualization</option>
+</select>
+
+<label>Due Date (for Google Calendar export)</label>
+<input type="datetime-local" id="dueDate">
+
+<h4>SMART Goal Details</h4>
+
+<textarea id="specific" placeholder="Specific: What exactly will you accomplish?"></textarea>
+<textarea id="measurable" placeholder="Measurable: How will you measure success?"></textarea>
+<textarea id="achievable" placeholder="Achievable: Why is this realistic?"></textarea>
+<textarea id="relevant" placeholder="Relevant: Why does this matter?"></textarea>
+<textarea id="timebound" placeholder="Time-bound: What is the deadline or schedule?"></textarea>
+
+<button class="primary" onclick="addTask()">Add Task</button>
+</div>
+
+<div>
+<button class="export" onclick="exportText()">Download as Text</button>
+<button class="export" onclick="exportJSON()">Download JSON Backup</button>
+<button class="export" onclick="exportICS()">Download Google Calendar (.ics)</button>
+</div>
+
+<div id="taskList"></div>
+
+<footer>Stored locally in browser (localStorage)</footer>
+</div>
+
+<script>
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+
+function save() {
+localStorage.setItem("tasks", JSON.stringify(tasks));
+}
+
+function smartScore(smart){
+let filled = Object.values(smart).filter(v => v.trim() !== "").length;
+return Math.round((filled/5)*100);
+}
+
+function addTask(){
+let task = {
+id: Date.now(),
+title: document.getElementById("title").value,
+time: document.getElementById("time").value,
+maslow: document.getElementById("maslow").value,
+dueDate: document.getElementById("dueDate").value,
+smart:{
+S: specific.value,
+M: measurable.value,
+A: achievable.value,
+R: relevant.value,
+T: timebound.value
+}
+};
+
+if(!task.title.trim()) return alert("Enter title");
+
+tasks.push(task);
+save();
+render();
+document.querySelectorAll("input, textarea").forEach(el=>el.value="");
+}
+
+function deleteTask(id){
+tasks = tasks.filter(t=>t.id!==id);
+save();
+render();
+}
+
+function render(){
+let list=document.getElementById("taskList");
+list.innerHTML="";
+
+tasks.forEach(t=>{
+let div=document.createElement("div");
+div.className="card";
+
+div.innerHTML=`
+<h3>${t.title}</h3>
+<div>
+<span class="badge">${t.time}</span>
+<span class="badge">${t.maslow}</span>
+${t.dueDate ? `<span class="badge">Due: ${new Date(t.dueDate).toLocaleString()}</span>`:""}
+</div>
+
+<div class="smartScore">SMART Score: ${smartScore(t.smart)}%</div>
+
+<details>
+<summary>View SMART Details</summary>
+<p><b>Specific:</b> ${t.smart.S || "-"}</p>
+<p><b>Measurable:</b> ${t.smart.M || "-"}</p>
+<p><b>Achievable:</b> ${t.smart.A || "-"}</p>
+<p><b>Relevant:</b> ${t.smart.R || "-"}</p>
+<p><b>Time-bound:</b> ${t.smart.T || "-"}</p>
+</details>
+
+<button class="danger" onclick="deleteTask(${t.id})">Delete</button>
+`;
+
+list.appendChild(div);
+});
+}
+
+function exportText(){
+let content = tasks.map(t=>`
+Title: ${t.title}
+Time Category: ${t.time}
+Maslow: ${t.maslow}
+Due: ${t.dueDate || "None"}
+
+SMART:
+Specific: ${t.smart.S}
+Measurable: ${t.smart.M}
+Achievable: ${t.smart.A}
+Relevant: ${t.smart.R}
+Time-bound: ${t.smart.T}
+-----------------------------------------
+`).join("\n");
+
+downloadFile(content,"tasks.txt","text/plain");
+}
+
+function exportJSON(){
+downloadFile(JSON.stringify(tasks,null,2),"tasks.json","application/json");
+}
+
+function exportICS(){
+let ics = "BEGIN:VCALENDAR\nVERSION:2.0\n";
+
+tasks.forEach(t=>{
+if(!t.dueDate) return;
+
+let start = new Date(t.dueDate);
+let end = new Date(start.getTime()+60*60*1000);
+
+function formatDate(d){
+return d.toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+}
+
+ics += `BEGIN:VEVENT
+UID:${t.id}
+DTSTAMP:${formatDate(new Date())}
+DTSTART:${formatDate(start)}
+DTEND:${formatDate(end)}
+SUMMARY:${t.title}
+DESCRIPTION:Maslow: ${t.maslow} | SMART Score: ${smartScore(t.smart)}%
+END:VEVENT
+`;
+});
+
+ics += "END:VCALENDAR";
+
+downloadFile(ics,"tasks_calendar.ics","text/calendar");
+}
+
+function downloadFile(content,filename,type){
+let blob = new Blob([content],{type});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download=filename;
+a.click();
+}
+
+render();
+</script>
+</body>
+</html>
